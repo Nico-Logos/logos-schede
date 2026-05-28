@@ -1,0 +1,12 @@
+streamlit>=1.40.0
+requests>=2.32.0
+pdfplumber>=0.11.0
+pypdf>=5.1.0
+python-dotenv>=1.0.1
+anthropic>=0.39.0
+# Passo 3A/3B — redazione + impaginazione
+jinja2>=3.1.0
+playwright>=1.40.0
+pymupdf>=1.24.0
+# Passo 4 — persistenza Supabase
+supabase>=2.0.0

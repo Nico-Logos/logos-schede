@@ -1,0 +1,22 @@
+# Tema Streamlit — Logos Advisory Services (palette: navy #1B2E5E, rosso #CC1219).
+#
+# NB: tenuto volutamente minimale e compatibile con Streamlit Cloud recente.
+# NON inserire `[server] headless = false` (su Cloud l'headless lo gestisce la
+# piattaforma) né `showErrorDetails = false` (è diventato un enum: un booleano
+# può bloccare l'avvio, e `false` nasconde i traceback). Lezione dal BP Tool.
+
+[theme]
+base = "light"
+primaryColor = "#CC1219"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F5F5F7"
+textColor = "#1B2E5E"
+font = "sans serif"
+
+[browser]
+gatherUsageStats = false
+
+[client]
+toolbarMode = "minimal"
+# Traceback completo in caso di errore (utile in test e su Cloud).
+showErrorDetails = "full"

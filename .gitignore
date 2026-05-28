@@ -1,0 +1,25 @@
+# Segreti — MAI committare
+.env
+.streamlit/secrets.toml
+
+# Virtualenv
+venv/
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# OS / editor
+.DS_Store
+
+# Output locali (decreti scaricati, schede/PDF/PNG generati)
+output/
+tmp/
+*.tmp
+
+# Schede reference (materiale Logos non pubblico — vive in locale per dev,
+# ma il repo è pubblico per Streamlit Community Cloud).
+reference/
