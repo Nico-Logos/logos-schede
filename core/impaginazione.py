@@ -451,6 +451,14 @@ def _zoom_step(s: dict, overflow: list[int], floor: float = _FIT_ZOOM_MIN) -> bo
     return changed
 
 
+def _can_relocate_core_p2_to_p3(s: dict) -> bool:
+    """Resta un blocco CORE di coda di P2 (disclaimer o CTA) da spostare in P3?"""
+    return bool(
+        (s.get("disclaimer_legale") and not s.get("_disclaimer_to_p3"))
+        or not s.get("_cta_to_p3")
+    )
+
+
 def _relocate_core_p2_to_p3(s: dict) -> bool:
     """Sposta in P3 il prossimo blocco CORE di coda di P2, in ordine di minima
     invasività: prima il disclaimer (l'ultimo elemento, piccolo), poi la CTA.
@@ -480,9 +488,19 @@ _JS_MEASURE_OVERFLOW = (
 
 async def _render_and_measure(page, scheda: dict, data_scheda: str | None) -> list[int]:
     """Renderizza la scheda nel page Chromium e restituisce l'overflow per
-    pagina in pixel: overflow[i] > 0 → la pagina i sfora l'altezza A4."""
+    pagina in pixel: overflow[i] > 0 → la pagina i sfora l'altezza A4.
+
+    La misura deve coincidere 1:1 con ciò che finirà nel PDF, altrimenti
+    PASS 4 azzererebbe un overflow "di schermo" mentre la stampa continua a
+    tagliare. Due accorgimenti:
+      • il `page` è in emulazione media 'print' (impostata in _async_genera),
+        lo stesso media di page.pdf();
+      • prima di misurare attendiamo il caricamento dei font: con le metriche
+        del fallback (font non ancora pronto) le altezze sarebbero falsate e
+        divergerebbero dal PDF finale (tipico sul Cloud, dove il corpo è Carlito)."""
     html = render_html(scheda, data_scheda)
     await page.set_content(html, wait_until="load")
+    await page.evaluate("async () => { try { await document.fonts.ready } catch (e) {} }")
     return await page.evaluate(_JS_MEASURE_OVERFLOW)
 
 
@@ -548,6 +566,11 @@ async def _async_genera(
         browser = await p.chromium.launch()
         try:
             page = await browser.new_page()
+            # Misura e PDF DEVONO usare lo stesso media: page.pdf() renderizza in
+            # 'print', quindi emuliamo 'print' anche per la misura. Senza, lo
+            # schermo poteva misurare overflow 0 mentre la stampa tagliava — è la
+            # causa più probabile del residuo visto su P1 in produzione.
+            await page.emulate_media(media="print")
 
             scheda = _prepare_view(scheda)
             overflow = await _render_and_measure(page, scheda, data_scheda)
@@ -616,34 +639,43 @@ async def _async_genera(
                 overflow = await _render_and_measure(page, scheda, data_scheda)
                 info["iter_pass3"] += 1
 
-            # ── PASS 4 — rete DETERMINISTICA: overflow ZERO garantito ─────────
-            # Dopo reflow+sintesi un residuo può restare solo dal contenuto CORE
-            # (tipico: ultima riga della CTA di P2, che il reflow non tocca).
-            # Qui lo chiudiamo SEMPRE, nell'ordine scelto:
-            #   • residuo PICCOLO (< soglia) o P3 già esistente → auto-scaling
-            #     tipografico della pagina che sfora (zoom .body): impercettibile
-            #     e mantiene 2 pagine;
-            #   • residuo GRANDE con P3 vuota → prima riloca un blocco core in P3,
-            #     poi eventualmente scala.
-            # Quando lo zoom tocca il floor, la rilocazione in P3 fa da rete (P3
-            # ospita qualunque contenuto): è impossibile finire con testo tagliato.
+            # ── PASS 4 — rete DETERMINISTICA UNIVERSALE: overflow ZERO ────────
+            # Agisce su OGNI pagina che sfora (P1, P2, P3) e per QUALSIASI blocco
+            # core (tabella, liste, callout, CTA, disclaimer). L'auto-scaling
+            # (_zoom_step) itera su tutte le pagine in overflow e riduce lo zoom
+            # della .body di CIASCUNA: non è legato a P2.
+            # Gerarchia (come concordato):
+            #   • residuo PICCOLO (≤ soglia), o overflow su P1/P3, o P3 già esistente
+            #     → auto-scaling tipografico della/e pagina/e che sfora/no;
+            #   • residuo GRANDE su P2 con P3 vuota → prima riloca un blocco core di
+            #     coda di P2 (disclaimer→CTA) in P3, poi eventualmente scala;
+            #   • esaurite quelle leve → scaling di emergenza sotto il floor 0.90
+            #     (fino all'hard-min), con flag pass4_below_floor.
+            # La rilocazione aiuta SOLO l'overflow di P2: si tenta unicamente quando
+            # P2 sfora e ha ancora un blocco core spostabile. Per P1/P3 si scala.
             def _residual(ov) -> int:
                 return max(ov) if ov else 0
 
             guard = 0
             while _residual(overflow) > 0 and guard < 200:
                 guard += 1
-                prefer_scaling = (
-                    _residual(overflow) <= _FIT_SMALL_RESIDUAL_PX or _has_p3(scheda)
-                )
-                if prefer_scaling:
-                    moved = _zoom_step(scheda, overflow) or _relocate_core_p2_to_p3(scheda)
-                else:
+                p2_overflows = len(overflow) >= 2 and overflow[1] > 0
+                can_reloc = p2_overflows and _can_relocate_core_p2_to_p3(scheda)
+                big = _residual(overflow) > _FIT_SMALL_RESIDUAL_PX
+                # rilocazione-first solo per residuo grande su P2, con P3 ancora vuota
+                relocation_first = big and can_reloc and not _has_p3(scheda)
+
+                if relocation_first:
                     moved = _relocate_core_p2_to_p3(scheda) or _zoom_step(scheda, overflow)
+                else:
+                    moved = _zoom_step(scheda, overflow) or (
+                        _relocate_core_p2_to_p3(scheda) if can_reloc else False
+                    )
                 if not moved:
-                    # Leve "preferite" esaurite (rilocazione finita + zoom al floor
-                    # leggibile 0.90). "Non tagliare mai" è non negoziabile: si scende
-                    # sotto il floor, fino all'hard-min, finché overflow == 0.
+                    # Leve "preferite" esaurite (zoom al floor leggibile 0.90 su
+                    # tutte le pagine che sforano + niente più da rilocare).
+                    # "Non tagliare mai" è non negoziabile: scaling di emergenza
+                    # sotto il floor, su OGNI pagina in overflow, fino all'hard-min.
                     if _zoom_step(scheda, overflow, _FIT_ZOOM_HARD_MIN):
                         info["pass4_below_floor"] = True
                     else:
