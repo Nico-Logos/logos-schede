@@ -160,7 +160,7 @@ table.car td.voce{font-weight:bold;color:var(--navy);width:36%;}
 .footer .right{font-size:7.2pt;color:#cfd6e6;text-align:right;}
 </style></head><body>
 {# n_pagine dinamico: 3 se la rete finale ha attivato P3, altrimenti 2 #}
-{% set _n_pagine = 3 if (s._p3_callout or s._p3_table_extra) else 2 %}
+{% set _n_pagine = 3 if (s._p3_callout or s._p3_table_extra or s._cta_to_p3 or s._disclaimer_to_p3) else 2 %}
 
 {# ===================== PAGINA 1 ===================== #}
 <div class="page">
@@ -180,7 +180,7 @@ table.car td.voce{font-weight:bold;color:var(--navy);width:36%;}
     {% endfor %}
   </div>
 
-  <div class="body">
+  <div class="body" style="zoom:{{ s._p1_zoom|default(1) }}">
     <div class="lead">{{ s.lead }}</div>
 
     <div class="sec">A chi si rivolge</div><div class="rule"></div>
@@ -231,7 +231,7 @@ table.car td.voce{font-weight:bold;color:var(--navy);width:36%;}
     <div class="title p2">{{ s.titolo_p2 or 'Spese ammissibili, timing e operatività' }}</div>
   </div>
 
-  <div class="body">
+  <div class="body" style="zoom:{{ s._p2_zoom|default(1) }}">
     {# Rifluiti da P1 quando lì non stavano: callout prima, poi righe tabella eccedenti #}
     {% for co in s._p2_callout %}
     <div class="callout"><div class="h">{{ co.titolo }}</div><p>{{ co.paragrafo }}</p></div>
@@ -280,12 +280,14 @@ table.car td.voce{font-weight:bold;color:var(--navy);width:36%;}
       {% endfor %}
     </div>
 
+    {% if not s._cta_to_p3 %}
     <div class="cta">
       <div class="l"><div class="h">{{ s.cta_titolo }}</div><p>{{ s.cta_paragrafo }}</p></div>
       <div class="r"><div class="lbl">Contatti</div><div class="mail">info@logosadvisory.it</div><div class="web">WWW.LOGOSADVISORY.IT</div></div>
     </div>
+    {% endif %}
 
-    {% if s.disclaimer_legale %}<div class="disclaimer">{{ s.disclaimer_legale }}</div>{% endif %}
+    {% if s.disclaimer_legale and not s._disclaimer_to_p3 %}<div class="disclaimer">{{ s.disclaimer_legale }}</div>{% endif %}
   </div>
 
   <div class="footer">
@@ -295,7 +297,7 @@ table.car td.voce{font-weight:bold;color:var(--navy);width:36%;}
 </div>
 
 {# ===================== PAGINA 3 (condizionale: rete finale di fitting) ===================== #}
-{% if s._p3_callout or s._p3_table_extra %}
+{% if s._p3_callout or s._p3_table_extra or s._cta_to_p3 or s._disclaimer_to_p3 %}
 <div class="page">
   <div class="header p2">
     <div class="htop">
@@ -305,7 +307,7 @@ table.car td.voce{font-weight:bold;color:var(--navy);width:36%;}
     <div class="title p2">Note e dettagli (segue)</div>
   </div>
 
-  <div class="body">
+  <div class="body" style="zoom:{{ s._p3_zoom|default(1) }}">
     {% if s._p3_table_extra %}
     <div class="sec">Caratteristiche (segue)</div><div class="rule"></div>
     <table class="car">
@@ -317,6 +319,14 @@ table.car td.voce{font-weight:bold;color:var(--navy);width:36%;}
     {% for co in s._p3_callout %}
     <div class="callout"><div class="h">{{ co.titolo }}</div><p>{{ co.paragrafo }}</p></div>
     {% endfor %}
+    {# Blocchi CORE rilocati da P2 dal PASS 4 (rete finale anti-overflow) #}
+    {% if s._cta_to_p3 %}
+    <div class="cta">
+      <div class="l"><div class="h">{{ s.cta_titolo }}</div><p>{{ s.cta_paragrafo }}</p></div>
+      <div class="r"><div class="lbl">Contatti</div><div class="mail">info@logosadvisory.it</div><div class="web">WWW.LOGOSADVISORY.IT</div></div>
+    </div>
+    {% endif %}
+    {% if s._disclaimer_to_p3 and s.disclaimer_legale %}<div class="disclaimer">{{ s.disclaimer_legale }}</div>{% endif %}
   </div>
 
   <div class="footer">
@@ -349,6 +359,23 @@ def render_html(scheda: dict, data_scheda: str | None = None) -> str:
 # Il navy bar di a_chi_si_rivolge.blocco.callout è CORE (fisso): se il modello
 # ci mette contenuto verboso il problema è A MONTE → vincolo prompt in redazione.
 _MIN_ROWS_P1 = 6  # voci core che vogliamo SEMPRE in P1
+
+# ── PASS 4 — rete deterministica overflow-zero (vedi _async_genera) ─────────
+# Soglia "residuo piccolo": sotto questa l'auto-scaling tipografico è
+# impercettibile e va preferito (la scheda resta a 2 pagine). Sopra, con P3
+# ancora vuota, conviene rilocare un blocco core in P3 invece di comprimere.
+_FIT_SMALL_RESIDUAL_PX = 40
+# Auto-scaling: zoom della .body della pagina che sfora, a step piccoli fino a
+# overflow 0, con un floor leggibile (sotto, il corpo diventerebbe troppo
+# piccolo). 0.90 ≈ 9.2pt→8.3pt: ancora pienamente leggibile.
+_FIT_ZOOM_STEP = 0.005
+_FIT_ZOOM_MIN = 0.90
+# Hard-min di EMERGENZA: si scende sotto il floor leggibile SOLO quando ogni
+# altra leva (rilocazione + zoom fino a 0.90) è esaurita e l'alternativa sarebbe
+# tagliare testo. "Non tagliare mai" è non negoziabile e prevale sull'estetica;
+# l'evento è raro, da input fuori specifica, e viene segnato (pass4_below_floor).
+_FIT_ZOOM_HARD_MIN = 0.60
+_ZOOM_KEYS = ("_p1_zoom", "_p2_zoom", "_p3_zoom")
 
 
 def _prepare_view(scheda: dict) -> dict:
@@ -401,6 +428,50 @@ def _reflow_one_p2_to_p3(s: dict) -> None:
         s["_p3_table_extra"].insert(0, s["_p2_table_extra"].pop())
 
 
+# ── PASS 4 helpers — auto-scaling tipografico + rilocazione core→P3 ─────────
+
+
+def _page_zoom(s: dict, idx: int) -> float:
+    """Zoom corrente della .body della pagina idx (1.0 se mai ridotto)."""
+    if idx < 0 or idx >= len(_ZOOM_KEYS):
+        return 1.0
+    return float(s.get(_ZOOM_KEYS[idx], 1.0))
+
+
+def _zoom_step(s: dict, overflow: list[int], floor: float = _FIT_ZOOM_MIN) -> bool:
+    """Riduce di UNO step lo zoom della .body di OGNI pagina che sfora, restando
+    entro `floor`. Ritorna True se almeno una pagina è stata ridotta."""
+    changed = False
+    for i, ov in enumerate(overflow or []):
+        if ov > 0 and i < len(_ZOOM_KEYS):
+            nxt = round(_page_zoom(s, i) - _FIT_ZOOM_STEP, 4)
+            if nxt >= floor - 1e-9:
+                s[_ZOOM_KEYS[i]] = nxt
+                changed = True
+    return changed
+
+
+def _relocate_core_p2_to_p3(s: dict) -> bool:
+    """Sposta in P3 il prossimo blocco CORE di coda di P2, in ordine di minima
+    invasività: prima il disclaimer (l'ultimo elemento, piccolo), poi la CTA.
+    Ritorna True se ha spostato qualcosa, False se non resta nulla di rilocabile."""
+    if s.get("disclaimer_legale") and not s.get("_disclaimer_to_p3"):
+        s["_disclaimer_to_p3"] = True
+        return True
+    if not s.get("_cta_to_p3"):
+        s["_cta_to_p3"] = True
+        return True
+    return False
+
+
+def _has_p3(s: dict) -> bool:
+    """P3 esiste (renderizzata) per reflow di mobili o rilocazione di core?"""
+    return bool(
+        s.get("_p3_callout") or s.get("_p3_table_extra")
+        or s.get("_cta_to_p3") or s.get("_disclaimer_to_p3")
+    )
+
+
 _JS_MEASURE_OVERFLOW = (
     "() => [...document.querySelectorAll('.page')]"
     ".map(p => Math.max(0, p.scrollHeight - p.clientHeight))"
@@ -437,10 +508,16 @@ async def _async_genera(
       2) Rifluimento statico P1→P2 (gratuito): muove callout e righe-tabella eccedenti.
       3) Solo se ancora sfora → sintesi adattiva Claude (1 chiamata) che accorcia
          i campi verbosi preservando ogni dato fattuale; poi ri-rifluimento P1→P2.
-      4) Solo se P2 sfora ancora → rete finale: rifluisce P2→P3 (creando P3) i
-         blocchi mobili (callout/righe eccedenti). Meglio 3 pagine pulite che 2
-         tagliate.
-      5) Se a fine di tutto qualcosa sfora ancora → WARNING esplicito + flag.
+      4) Solo se P2 sfora ancora → rete finale MOBILE: rifluisce P2→P3 (creando
+         P3) i blocchi mobili (callout/righe eccedenti).
+      PASS 4) Rete DETERMINISTICA overflow-zero, se resta residuo dal contenuto
+         CORE (tipico: ultima riga della CTA). Ordine: per residui piccoli (o se
+         P3 esiste già) auto-scaling tipografico della pagina che sfora (zoom
+         .body, entro un floor leggibile); per residui grandi con P3 vuota,
+         rilocazione di un blocco core (disclaimer→CTA) in P3. Combinati,
+         garantiscono overflow == 0: `overflow:hidden` non taglia MAI contenuto.
+      5) Se — solo per contenuti patologici — qualcosa sforasse ancora a leve
+         esaurite → WARNING esplicito + flag fitting_failed.
     """
     import sys as _sys
 
@@ -455,10 +532,14 @@ async def _async_genera(
         "iter_pass1": 0,
         "iter_pass2": 0,
         "iter_pass3": 0,
+        "iter_pass4": 0,
         "sintesi_used": False,
         "sintesi_error": None,
         "overflow_iniziale_px": [0, 0],
         "overflow_finale_px": [0, 0],
+        "pass4_zoom": [],
+        "pass4_relocated": [],
+        "pass4_below_floor": False,
         "n_pagine": 2,
         "fitting_failed": False,
     }
@@ -535,10 +616,54 @@ async def _async_genera(
                 overflow = await _render_and_measure(page, scheda, data_scheda)
                 info["iter_pass3"] += 1
 
-            # n_pagine: 3 se P3 ha contenuto, altrimenti 2
-            n_pag = 3 if (scheda.get("_p3_callout") or scheda.get("_p3_table_extra")) else 2
+            # ── PASS 4 — rete DETERMINISTICA: overflow ZERO garantito ─────────
+            # Dopo reflow+sintesi un residuo può restare solo dal contenuto CORE
+            # (tipico: ultima riga della CTA di P2, che il reflow non tocca).
+            # Qui lo chiudiamo SEMPRE, nell'ordine scelto:
+            #   • residuo PICCOLO (< soglia) o P3 già esistente → auto-scaling
+            #     tipografico della pagina che sfora (zoom .body): impercettibile
+            #     e mantiene 2 pagine;
+            #   • residuo GRANDE con P3 vuota → prima riloca un blocco core in P3,
+            #     poi eventualmente scala.
+            # Quando lo zoom tocca il floor, la rilocazione in P3 fa da rete (P3
+            # ospita qualunque contenuto): è impossibile finire con testo tagliato.
+            def _residual(ov) -> int:
+                return max(ov) if ov else 0
+
+            guard = 0
+            while _residual(overflow) > 0 and guard < 200:
+                guard += 1
+                prefer_scaling = (
+                    _residual(overflow) <= _FIT_SMALL_RESIDUAL_PX or _has_p3(scheda)
+                )
+                if prefer_scaling:
+                    moved = _zoom_step(scheda, overflow) or _relocate_core_p2_to_p3(scheda)
+                else:
+                    moved = _relocate_core_p2_to_p3(scheda) or _zoom_step(scheda, overflow)
+                if not moved:
+                    # Leve "preferite" esaurite (rilocazione finita + zoom al floor
+                    # leggibile 0.90). "Non tagliare mai" è non negoziabile: si scende
+                    # sotto il floor, fino all'hard-min, finché overflow == 0.
+                    if _zoom_step(scheda, overflow, _FIT_ZOOM_HARD_MIN):
+                        info["pass4_below_floor"] = True
+                    else:
+                        break  # hard-min raggiunto: input fuori da ogni specifica
+                overflow = await _render_and_measure(page, scheda, data_scheda)
+                info["iter_pass4"] += 1
+
+            # n_pagine: 3 se P3 ha contenuto (mobili rifluiti o core rilocati)
+            n_pag = 3 if _has_p3(scheda) else 2
             info["n_pagine"] = n_pag
             info["overflow_finale_px"] = list(overflow) if overflow else [0, 0]
+            info["pass4_zoom"] = [_page_zoom(scheda, i) for i in range(n_pag)]
+            info["pass4_relocated"] = [
+                name
+                for name, flag in (
+                    ("disclaimer", scheda.get("_disclaimer_to_p3")),
+                    ("cta", scheda.get("_cta_to_p3")),
+                )
+                if flag
+            ]
 
             # Warning esplicito se la rete finale non ha risolto
             if any(o > 0 for o in info["overflow_finale_px"]):
