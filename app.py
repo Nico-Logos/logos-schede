@@ -32,6 +32,17 @@ ROOT = Path(__file__).resolve().parent
 TMP = ROOT / "tmp"
 
 
+def _inietta_brand() -> None:
+    """CSS di brand Logos (sidebar navy + tipografia). Canone: vedi BRAND_UI.md
+    nella Suite. st.html collassa il nodo <style> (niente spazio vuoto)."""
+    css = ROOT / "assets" / "logos_brand.css"
+    if css.exists():
+        st.html(f"<style>{css.read_text(encoding='utf-8')}</style>")
+
+
+_inietta_brand()
+
+
 def carica_segreti() -> dict[str, bool]:
     """Porta i segreti da .env (locale) o st.secrets (Cloud) in os.environ.
 

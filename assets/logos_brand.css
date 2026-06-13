@@ -1,0 +1,69 @@
+/* =============================================================================
+   Logos Suite — CSS di brand riusabile (canone: Logos Patent)
+   Vedi BRAND_UI.md. Copia questo file in <repo>/assets/logos_brand.css.
+   Scope volutamente conservativo: la sidebar è ridipinta navy, l'area
+   principale riceve solo la tipografia di brand. Nessuna modifica strutturale.
+   ============================================================================= */
+
+/* ----- Font body open-source (Calibri non è di sistema fuori da Windows) ----- */
+@import url('https://fonts.googleapis.com/css2?family=Carlito:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+
+/* ----- Tipografia di brand -----
+   Titoli: Georgia italic (serif di sistema). Body: Calibri → Carlito. */
+html, body, [data-testid="stAppViewContainer"], [data-testid="stSidebar"] {
+    font-family: Calibri, Carlito, system-ui, sans-serif;
+}
+[data-testid="stAppViewContainer"] h1,
+[data-testid="stAppViewContainer"] h2,
+[data-testid="stAppViewContainer"] h3 {
+    font-family: Georgia, 'EB Garamond', 'Times New Roman', serif;
+    font-style: italic;
+    color: #1B2E5E;
+}
+
+/* ============================================================================
+   Sidebar navy — tecnica di Patent. Scope: SOLO il container della sidebar.
+   ============================================================================ */
+section[data-testid="stSidebar"] {
+    background-color: #1B2E5E;
+}
+section[data-testid="stSidebar"] h1,
+section[data-testid="stSidebar"] h2,
+section[data-testid="stSidebar"] h3,
+section[data-testid="stSidebar"] p,
+section[data-testid="stSidebar"] span,
+section[data-testid="stSidebar"] small,
+section[data-testid="stSidebar"] li {
+    color: #F2F4F8;
+}
+/* Titoli in sidebar: Georgia italic chiaro su navy. */
+section[data-testid="stSidebar"] h1,
+section[data-testid="stSidebar"] h2,
+section[data-testid="stSidebar"] h3 {
+    font-family: Georgia, 'EB Garamond', 'Times New Roman', serif;
+    font-style: italic;
+    color: #F2F4F8;
+}
+/* Inline-code: i colori di default del tema chiaro non contrastano su navy. */
+section[data-testid="stSidebar"] code {
+    color: #F2F4F8;
+    background-color: rgba(255, 255, 255, 0.15);
+}
+/* Bottoni (es. Esci): ghost chiaro su navy. */
+section[data-testid="stSidebar"] button {
+    background-color: transparent;
+    border: 1px solid #F2F4F8;
+}
+section[data-testid="stSidebar"] button p,
+section[data-testid="stSidebar"] button span {
+    color: #F2F4F8;
+}
+/* Alert (es. secret mancante): sfondo chiaro mantenuto, testo scuro leggibile. */
+section[data-testid="stSidebar"] div[data-testid="stAlert"] p,
+section[data-testid="stSidebar"] div[data-testid="stAlert"] span {
+    color: #7f1d1d;
+}
+/* Il logo è già pensato per fondo scuro: MAI invertirlo/filtrarlo. */
+section[data-testid="stSidebar"] img {
+    filter: none;
+}
