@@ -67,3 +67,32 @@ section[data-testid="stSidebar"] div[data-testid="stAlert"] span {
 section[data-testid="stSidebar"] img {
     filter: none;
 }
+
+/* ============================================================================
+   RESPONSIVE — smartphone (≤640px). Adattamento, non redesign.
+   La sidebar Streamlit è già collassabile nativamente (hamburger ≤ tablet).
+   ============================================================================ */
+@media (max-width: 640px) {
+    /* Le colonne (st.columns) di default restano affiancate e si schiacciano:
+       su smartphone le impiliamo. */
+    [data-testid="stHorizontalBlock"] {
+        flex-direction: column !important;
+    }
+    [data-testid="stHorizontalBlock"] > [data-testid="stColumn"],
+    [data-testid="stHorizontalBlock"] > [data-testid="column"] {
+        width: 100% !important;
+        flex: 1 1 100% !important;
+        min-width: 0 !important;
+    }
+    /* Recupera spazio orizzontale tolto dal padding di default. */
+    .block-container {
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+    }
+    /* Tabelle e dataframe densi: scroll orizzontale invece di overflow tagliato. */
+    [data-testid="stTable"],
+    [data-testid="stDataFrame"],
+    [data-testid="stDataFrameResizable"] {
+        overflow-x: auto !important;
+    }
+}
