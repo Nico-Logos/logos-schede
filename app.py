@@ -34,10 +34,14 @@ TMP = ROOT / "tmp"
 
 def _inietta_brand() -> None:
     """CSS di brand Logos (sidebar navy + tipografia). Canone: vedi BRAND_UI.md
-    nella Suite. st.html collassa il nodo <style> (niente spazio vuoto)."""
+    nella Suite. NB: si usa st.markdown(unsafe_allow_html=True) e NON st.html:
+    quest'ultimo, da Streamlit 1.5x, sanifica e rimuove i tag <style>."""
     css = ROOT / "assets" / "logos_brand.css"
     if css.exists():
-        st.html(f"<style>{css.read_text(encoding='utf-8')}</style>")
+        st.markdown(
+            f"<style>{css.read_text(encoding='utf-8')}</style>",
+            unsafe_allow_html=True,
+        )
 
 
 _inietta_brand()
